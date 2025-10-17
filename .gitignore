@@ -1,1 +1,4 @@
-/Dataset/
+Dataset/
+!Dataset/embeddings_subset.csv
+!Dataset/listens_subset.csv
+
