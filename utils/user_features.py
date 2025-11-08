@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np 
 import torch
 from torch.utils.data import TensorDataset
+from tqdm import tqdm_notebook as progress_bar
 
 
 def get_song_label_and_user_interacton(timestamp:int, user:int, song:int, likes:pd.DataFrame, 
@@ -52,13 +53,14 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
   """
     Function for creating the features and saving them into a tensor. 
   """
-  assert dataset_type in ["train", "val", 'test']
+  assert dataset_type in ["train1", "train2", "val", 'test']
 
   user_feats = []
   song_embeds = []
   labels = []
   # For each user create their user features and determine last listened song (in embedding) + extract label
-  for user in user_set:
+
+  for user in progress_bar(user_set, desc=f"{dataset_type}"):
       subset = user_item_data[user_item_data['uid'] == user]
       for t in range(len(subset)-10):
           data = subset.iloc[:t+10]
