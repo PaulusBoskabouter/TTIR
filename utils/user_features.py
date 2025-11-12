@@ -7,9 +7,7 @@ To keep the notebook as uncluttered as possible, I've thrown a lot of functions 
 # from __future__ import annotations
 import pandas as pd
 from pathlib import Path
-import numpy as np 
-import torch
-from torch.utils.data import DataLoader, TensorDataset
+from utils.dataset_functions import save_tensor_dataset
 from tqdm import tqdm_notebook as progress_bar
 
 
@@ -19,6 +17,9 @@ def get_song_label_and_user_interacton(timestamp:int, user:int, song:int, likes:
     """
     (Pardon the horrendous long function name)
     Aggregate a user's interactions with a specific song up to ``timestamp``.
+
+    Args:
+
 
     Returns
     -------
@@ -59,7 +60,9 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
                               dataset_type:str, file_loc:Path = Path("Dataset") / "processed" 
                               ) -> None:
     """
-    Function for creating the features. 
+    Extract features per user and save them into seperate files.
+    Args:
+        
     """
     assert dataset_type in ["train", "val", 'test']
 
@@ -70,6 +73,7 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
         if not (Path("Dataset")/ "processed" / f"{dataset_type}" / f"{user}.pt").exists(): # Skip if we've already analysed this user.
             subset = user_item_data[user_item_data['uid'] == user]
             user_feats = []
+            user_ids = []
             song_embeds = []
             song_labels = []
             # For all of the user timepoints spanning from 10 timepoints to max timepoints of the user, we analyse their song interacton 
@@ -88,46 +92,14 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
                 labels, interactions = get_song_label_and_user_interacton(timestamp=data.iloc[-1]['timestamp'], user=user, song=song, 
                                                             likes=likes, unlikes=unlikes, dislikes=dislikes, undislikes=undislikes, user_data=data)
                 
-                features = [t, user, data['played_ratio_pct'].mean(), data['played_ratio_pct'].std(), data['track_length_seconds'].mean(), data['track_length_seconds'].std(), interactions/len(data)]
+                features = [t, data['played_ratio_pct'].mean(), data['played_ratio_pct'].std(), data['track_length_seconds'].mean(), data['track_length_seconds'].std(), interactions/len(data)]
                 
 
                 user_feats.append(features)
+                user_ids.append(user)
                 song_embeds.append(song_embedding)
                 song_labels.append(labels)
 
             # Save each user
             file_loc = Path("Dataset") / "processed" / f"{dataset_type}"
-            save_tensor_dataset(user, dataset_type, user_feats, song_embeds, song_labels, file_loc)
-
-
-  
-def save_tensor_dataset(file_name:str, user_feats:list, song_embeds:list, labels:list, file_loc:Path) -> None:
-    # Convert to tensor and save
-    file_loc.mkdir(parents=True, exist_ok=True)
-
-    user_feats   = torch.from_numpy(np.stack(user_feats)).float().clone()
-    song_embeds  = torch.from_numpy(np.stack(song_embeds)).float().clone()
-    labels       = torch.from_numpy(np.stack(labels)).float().clone()
-
-    data_to_save = {
-        "user_feats":   user_feats,
-        "song_embeds":  song_embeds,
-        "labels":     labels,
-    }
-
-    file_loc.mkdir(exist_ok=True)
-    torch.save(data_to_save, file_loc / f"{file_name}.pt")
-
-
-def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32) -> DataLoader:
-    """
-    Short function for reloading the afforementioned tensorfiles and store them into torch.utils.data.DataLoader. 
-    """
-
-    loaded = torch.load(file_loc / f"{file_name}.pt", map_location="cpu")
-    user_feats   = loaded["user_feats"]
-    song_embeds  = loaded["song_embeds"]
-    labels       = loaded["labels"]
-
-    dataset = TensorDataset(user_feats, song_embeds, labels)
-    return DataLoader(dataset, batch_size, shuffle=True)
+            save_tensor_dataset(user, user_feats, user_ids, song_embeds, song_labels, file_loc)
