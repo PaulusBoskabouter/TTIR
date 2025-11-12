@@ -83,21 +83,26 @@ class DualAugmentedTwoTower(nn.Module):
         loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
-    def plot(self, epochs, folder:Optional[Path] = None): 
-        x = np.arange(1, len(self.val_loss_history) + 1)
+    def plot(self, epochs:int, folder:Optional[Path] = None) -> None: 
+        """
+        Plot the current progress based on the historic loss data
+        Args:
+            epochs (int): The number of epochs the model should be trained on, purely used for the xlim.
+            folder (Path): If it is not None, we use it to save the plot to this folder.
+        """
 
-        # Slice the histories so they line up with the x‑values
+
+        x = np.arange(1, len(self.val_loss_history) + 1)
         train_losses = np.array(self.train_loss_history)
-        val_losses   = np.array(self.val_loss_history)
+        val_losses = np.array(self.val_loss_history)
 
         fig, ax = plt.subplots(figsize=(8, 5))
 
         # Plot both curves
         ax.plot(x, train_losses, label="Training loss")
-        ax.plot(x, val_losses,   label="Validation loss")
+        ax.plot(x, val_losses, label="Validation loss")
 
         # Add some polish
-
         ax.set_xlim(1, epochs+1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
@@ -106,9 +111,8 @@ class DualAugmentedTwoTower(nn.Module):
         ax.legend(loc="upper right")
 
 
-        clear_output(wait=True)
+        clear_output(wait=True) # make sure our notebook doesn't get cluttered
         if folder is not None:
-            # Ensure the parent directory exists
             folder.mkdir(parents=True, exist_ok=True)
             fig.savefig(folder/ f"{self.name}.png", bbox_inches="tight", dpi=300)
             plt.show()
@@ -119,6 +123,15 @@ class DualAugmentedTwoTower(nn.Module):
         plt.close(fig)
 
     def add_losses(self, train_loss:float, val_loss:float) -> None:
+        """
+        This function is just to add the historic data.
+        We save this data as well to make sure we can resume if anything goes wrong mid-training
+
+        Args:
+            train_loss (float): The current average epoch loss on the training data
+            val_loss (float): The current average epoch loss on the validation data
+        """
+
         self.train_loss_history.append(train_loss)
         self.val_loss_history.append(val_loss)
 
@@ -127,8 +140,8 @@ class DualAugmentedTwoTower(nn.Module):
         Save the model state dictionary to a file.
         Args:
             folder (Path): Directory to save the model.
-            filename (str): Name of the file to save the model.
         """
+
         folder.mkdir(parents=True, exist_ok=True)
         save_data = {
             'weights':        self.state_dict(),
@@ -157,8 +170,18 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
-    print("Training on:", device)
-    
+    """
+        Training function for training the models.
+        Args:
+            model (DualAugmentedTwoTower): DualAugmentedTwoTower class. What more is there to say.
+            train_dataloader (DataLoader): Pretty self explanatory; it's a torch.utils.data.Dataloader consisting of (user_features, user_id, song_embedding, labels).
+            val_dataloader   (DataLoader): Let's not be redundant here, it's the same but used for validation.
+            optimizer              (Adam): Wow, it's a torch Adam optimizer.
+            num_epochs              (int): Number of desired epochs (not counting early stopping)
+            lambda_u              (float): ...
+            lambda_v              (float): ...
+            device:                 (str): The device to load the model onto
+    """
     model.to(device)
     model.train()
 
@@ -173,7 +196,6 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         for batch in train_dataloader:
             user_features, user_id, song_embedding, labels = batch
                 
-
             # Move to device
             user_features = user_features.to(device)
             user_id = user_id.to(device)
@@ -210,18 +232,20 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 labels = labels.to(device)
 
                 score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
-
                 epoch_val_loss += loss.item() * labels.size(0)
             
             epoch_val_loss / len(val_dataloader.dataset)
         
-        
+
+        # Make a check if the validation loss has improved
         if epoch_val_loss > best_val_loss:
+            # if not, we wait for 'patience_couter' amount of epochs to improve
             if patience_counter > patience:
+                # if not we early stop
                 print('early stopped')
                 return
-            
             patience_counter += 1
+        # if improved, save the model and plot
         else:
             best_val_loss = epoch_val_loss
             model.save(Path("models"))
