@@ -70,9 +70,7 @@ def save_tensor_dataset(file_name:str, user_feats:list, user_ids:list, song_embe
     file_loc.mkdir(parents=True, exist_ok=True)
 
     user_feats   = torch.from_numpy(np.stack(user_feats)).float().clone()
-
-    user_feats = user_feats[:, :1]
-    user_ids = user_feats[:, 0]
+    user_ids     = torch.from_numpy(np.stack(user_ids)).long().clone()
     song_embeds  = torch.from_numpy(np.stack(song_embeds)).float().clone()
     labels       = torch.from_numpy(np.stack(labels)).float().clone()
 
@@ -87,7 +85,7 @@ def save_tensor_dataset(file_name:str, user_feats:list, user_ids:list, song_embe
     torch.save(data_to_save, file_loc / f"{file_name}.pt")
 
 
-def load_tensor_dataloader(file_name:str, file_loc:Path, user_to_idx:dict, batch_size:int=32) -> DataLoader:
+def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, label_id:int=0) -> DataLoader:
     """
     Short function for reloading the afforementioned tensorfiles and store them into torch.utils.data.DataLoader. 
     """
@@ -96,7 +94,7 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, user_to_idx:dict, batch
     user_feats   = loaded["user_feats"]
     user_ids     = loaded["user_ids"]
     song_embeds  = loaded["song_embeds"]
-    labels       = loaded["labels"]
+    labels       = loaded["labels"][:, label_id]
 
     
     dataset = TensorDataset(user_feats, user_ids, song_embeds, labels)
