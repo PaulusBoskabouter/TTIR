@@ -183,19 +183,21 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             device:                 (str): The device to load the model onto
     """
     model.to(device)
-    model.train()
-
+    
     best_val_loss = np.inf
     patience = 5
     patience_counter = 0
     
 
     for epoch in range(1, num_epochs + 1):
+        # Train
+        model.train()
         epoch_train_loss = 0.0
+        
 
-        for batch in train_dataloader:
-            user_features, user_id, song_embedding, labels = batch
-                
+        
+        for user_features, user_id, song_embedding, labels in train_dataloader:
+     
             # Move to device
             user_features = user_features.to(device)
             user_id = user_id.to(device)
@@ -219,11 +221,12 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         epoch_train_loss /= len(train_dataloader.dataset)
 
 
+        
+        # Validate
         epoch_val_loss = 0.0
-
         with torch.no_grad():
-            for batch in val_dataloader:
-                user_features, user_id, song_embedding, labels = batch
+            for user_features, user_id, song_embedding, labels in val_dataloader:
+                model.eval()
 
                 # Move to device
                 user_features = user_features.to(device)
@@ -234,7 +237,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
                 epoch_val_loss += loss.item() * labels.size(0)
             
-            epoch_val_loss / len(val_dataloader.dataset)
+        epoch_val_loss /= len(val_dataloader.dataset)
         
 
         # Make a check if the validation loss has improved

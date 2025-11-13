@@ -19,6 +19,7 @@ def get_song_label_and_user_interacton(timestamp:int, user:int, song:int, likes:
     Aggregate a user's interactions with a specific song up to ``timestamp``.
 
     Args:
+    timestamp (int):
 
 
     Returns
@@ -57,7 +58,7 @@ def get_song_label_and_user_interacton(timestamp:int, user:int, song:int, likes:
 
 def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:pd.DataFrame, 
                               unlikes:pd.DataFrame, dislikes:pd.DataFrame, undislikes:pd.DataFrame, 
-                              dataset_type:str, file_loc:Path = Path("Dataset") / "processed" 
+                              dataset_type:str, file_loc:Path = Path("dataset") / "processed" 
                               ) -> None:
     """
     Extract features per user and save them into seperate files.
@@ -70,7 +71,7 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
     # For each user create their user features and determine last listened song (in embedding) + extract label
     previous_len = None
     for user in progress_bar(user_set, desc=f"{dataset_type}"):
-        if not (Path("Dataset")/ "processed" / f"{dataset_type}" / f"{user}.pt").exists(): # Skip if we've already analysed this user.
+        if not (Path("dataset")/ "processed" / f"{dataset_type}" / f"{user}.pt").exists(): # Skip if we've already analysed this user.
             subset = user_item_data[user_item_data['uid'] == user]
             user_feats = []
             user_ids = []
@@ -101,5 +102,5 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
                 song_labels.append(labels)
 
             # Save each user
-            file_loc = Path("Dataset") / "processed" / f"{dataset_type}"
+            file_loc = Path("dataset") / "processed" / f"{dataset_type}"
             save_tensor_dataset(user, user_feats, user_ids, song_embeds, song_labels, file_loc)

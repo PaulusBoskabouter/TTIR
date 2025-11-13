@@ -51,8 +51,7 @@ class YambdaDataset:
         assert isinstance(data, DatasetDict)
         return data["train"]
     
-def download_df(dataset:YambdaDataset, dataset_type, dataset_dir:Path = Path("Dataset") / "unprocessed"):
-    
+def download_df(dataset:YambdaDataset, dataset_type, dataset_dir:Path = Path("dataset") / "unprocessed"):
     if not (dataset_dir / f"{dataset_type}.csv").exists():
         df = dataset.interaction(f"{dataset_type}").to_pandas()
         df.to_csv(dataset_dir / f"{dataset_type}.csv", index=False)
