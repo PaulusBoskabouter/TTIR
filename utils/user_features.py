@@ -93,9 +93,9 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, likes:
                 labels, interactions = get_song_label_and_user_interacton(timestamp=data.iloc[-1]['timestamp'], user=user, song=song, 
                                                             likes=likes, unlikes=unlikes, dislikes=dislikes, undislikes=undislikes, user_data=data)
                 
-                features = [t, data['played_ratio_pct'].mean(), data['played_ratio_pct'].std(), data['track_length_seconds'].mean(), data['track_length_seconds'].std(), interactions/len(data)]
-                
 
+                ## TODO: acquire more user features?
+                features = [t, data['played_ratio_pct'].mean(), data['played_ratio_pct'].std(), data['track_length_seconds'].mean(), data['track_length_seconds'].std(), interactions/len(data)]
                 user_feats.append(features)
                 user_ids.append(user)
                 song_embeds.append(song_embedding)

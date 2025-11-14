@@ -18,7 +18,9 @@ class Tower(nn.Module):
         self.feedforward = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, output_dim),
             nn.ReLU()
         )
 
@@ -111,7 +113,7 @@ class DualAugmentedTwoTower(nn.Module):
         ax.legend(loc="upper right")
 
 
-        clear_output(wait=True) # make sure our notebook doesn't get cluttered
+        
         if folder is not None:
             folder.mkdir(parents=True, exist_ok=True)
             fig.savefig(folder/ f"{self.name}.png", bbox_inches="tight", dpi=300)
@@ -145,8 +147,8 @@ class DualAugmentedTwoTower(nn.Module):
         folder.mkdir(parents=True, exist_ok=True)
         save_data = {
             'weights':        self.state_dict(),
-            'train_losses':   self.train_loss_history,
-            'val_losses':     self.val_loss_history
+            'train_losses':   self.train_loss_history.copy(),
+            'val_losses':     self.val_loss_history.copy()
 
         }
         torch.save(save_data, folder/f"{self.name}.pt")
@@ -185,7 +187,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
     model.to(device)
     
     best_val_loss = np.inf
-    patience = 5
+    patience = 10
     patience_counter = 0
     
 
@@ -193,8 +195,6 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         # Train
         model.train()
         epoch_train_loss = 0.0
-        
-
         
         for user_features, user_id, song_embedding, labels in train_dataloader:
      
@@ -235,12 +235,16 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 labels = labels.to(device)
 
                 score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
+                loss = model.loss(score, loss_u, loss_v, labels, lambda_u, lambda_v)
+
                 epoch_val_loss += loss.item() * labels.size(0)
             
         epoch_val_loss /= len(val_dataloader.dataset)
         
 
-        # Make a check if the validation loss has improved
+        clear_output(wait=True) # make sure our notebook doesn't get cluttered
+        print(f"Epoch: [{epoch}/{num_epochs}]")
+        
         if epoch_val_loss > best_val_loss:
             # if not, we wait for 'patience_couter' amount of epochs to improve
             if patience_counter > patience:
@@ -248,9 +252,12 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 print('early stopped')
                 return
             patience_counter += 1
+        
         # if improved, save the model and plot
         else:
+            patience_counter = 0
             best_val_loss = epoch_val_loss
             model.save(Path("models"))
-            model.add_losses(epoch_train_loss, epoch_val_loss)
-            model.plot(num_epochs, Path("models") / "plots")
+        
+        model.add_losses(epoch_train_loss, epoch_val_loss)
+        model.plot(num_epochs, Path("models") / "plots")
