@@ -213,10 +213,10 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             optimizer.zero_grad()
 
             # Forward pass
-            score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
+            score, pu_detach, pv_detach = model(user_features, user_id, song_embedding, labels)
 
             # Compute combined loss
-            loss = model.loss(score, loss_u, loss_v, labels, lambda_u, lambda_v)
+            loss = model.loss(score, pu_detach, pv_detach, labels, lambda_u, lambda_v)
 
             # Backward pass and optimization
             loss.backward()
