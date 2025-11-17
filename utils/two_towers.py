@@ -21,7 +21,7 @@ class Tower(nn.Module):
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
             nn.Linear(hidden_dim//2, output_dim),
-            nn.ReLU()
+            # nn.ReLU()
         )
 
     def forward(self, x):
@@ -65,23 +65,34 @@ class DualAugmentedTwoTower(nn.Module):
         pu = self.user_tower(torch.cat((user_features, au_batch), dim=1))
         pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
 
-        # Adaptive mimic mechanism (stop gradient for embeddings)
-        with torch.no_grad():
-            pu_detach = pu.detach()
-            pv_detach = pv.detach()
-
         # Final dot-product score
         score = torch.sum(pu * pv, dim = 1)
 
         # Return pu_detach & pv_detach for loss computation
-        return score, pu_detach, pv_detach
+        return score, pu, pv
 
 
+    """
+    Calculate & combine all loss terms including:
+        - Loss_p: dot-product loss
+        - Loss_u: AMM loss of user tower
+        - Loss_v: AMM loss of item tower
+    """
+    def loss(self, score, pu, pv, labels, lambda_u = 1, lambda_v = 1, tau:float = 0.07):
+        
+        # Dot-product loss
+        logits = score / tau # normalisation & dot product leads to small values, scaling helps the loss
+        loss_p = F.binary_cross_entropy_with_logits(logits, labels.float())
 
-    def loss(self, score, pu_detach, pv_detach, labels, lambda_u = 1, lambda_v = 1):
-        loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
-        loss_u = (F.mse_loss(self.au.expand_as(pv_detach), pv_detach) * labels).sum() / len(labels)
-        loss_v = (F.mse_loss(self.av.expand_as(pu_detach), pu_detach) * labels).sum() / len(labels)
+        # Stop gradient
+        pu_detach = pu.detach()
+        pv_detach = pv.detach()
+
+        # AMM loss
+        mask = labels.unsqueeze(1).float()
+        loss_u = (F.mse_loss(self.au.expand_as(pv_detach), pv_detach, reduction = None) * mask).sum() / len(labels)
+        loss_v = (F.mse_loss(self.av.expand_as(pu_detach), pu_detach, reduction = None) * mask).sum() / len(labels)
+
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
 
@@ -212,10 +223,10 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             optimizer.zero_grad()
 
             # Forward pass
-            score, pu_detach, pv_detach = model(user_features, user_id, song_embedding)
+            score, pu, pv = model(user_features, user_id, song_embedding)
 
             # Compute combined loss
-            loss = model.loss(score, pu_detach, pv_detach, labels, lambda_u, lambda_v)
+            loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
 
             # Backward pass and optimization
             loss.backward()
@@ -241,8 +252,8 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 song_embedding = song_embedding.to(device)
                 labels = labels.to(device)
 
-                score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
-                loss = model.loss(score, loss_u, loss_v, labels, lambda_u, lambda_v)
+                score, pu, pv = model(user_features, user_id, song_embedding)
+                loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
 
                 epoch_val_loss += loss.item() * labels.size(0)
             
