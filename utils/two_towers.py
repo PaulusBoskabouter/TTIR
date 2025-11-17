@@ -30,7 +30,7 @@ class Tower(nn.Module):
 
 
 class DualAugmentedTwoTower(nn.Module):
-    def __init__(self, name:str, user_dim:int, item_dim:int, aug_dim:int, hidden_dim:int, embed_dim:int):
+    def __init__(self, name:str, user_dim:int, embed_dim:int, item_dim:int, hidden_dim:int, aug_dim:int):
         super().__init__()
 
         self.name = name
@@ -44,8 +44,8 @@ class DualAugmentedTwoTower(nn.Module):
         self.user_id_embedder = nn.Embedding(4457, embed_dim, padding_idx=0)
         
         # Tower initialisations
-        self.user_tower = Tower(user_dim + aug_dim + embed_dim, hidden_dim, embed_dim)
-        self.item_tower = Tower(item_dim + aug_dim, hidden_dim, embed_dim)
+        self.user_tower = Tower(user_dim + embed_dim + aug_dim, hidden_dim, aug_dim)
+        self.item_tower = Tower(item_dim + aug_dim, hidden_dim, aug_dim)
 
         # Augmentation layers
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
