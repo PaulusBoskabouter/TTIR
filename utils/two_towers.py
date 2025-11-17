@@ -38,23 +38,16 @@ class DualAugmentedTwoTower(nn.Module):
         self.train_loss_history = []
         self.val_loss_history = []
 
-        # Categorical  user_id embedding
-        # Note: 4457 is hard coded because we know the amount of users in our dataset,
-        # which is fine for the experimental setup we're doing. But ideally, this would need improving.
-        self.user_id_embedder = nn.Embedding(4457, embed_dim, padding_idx=0)
         
         # Tower initialisations
-        self.user_tower = Tower(user_dim + aug_dim + embed_dim, hidden_dim, embed_dim)
+        self.user_tower = Tower(user_dim + aug_dim, hidden_dim, embed_dim)
         self.item_tower = Tower(item_dim + aug_dim, hidden_dim, embed_dim)
 
         # Augmentation layers
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
         self.av = nn.Parameter(torch.randn(aug_dim))  # item augmented vector
 
-    def forward(self, user_features, user_id, song_features, labels):
-        # convert user_ids to the embedded vector and concatinate with user features
-        user_vec = self.user_id_embedder(user_id)
-        user_features = torch.cat([user_features, user_vec], dim = 1)  # shape (B, sum_embedding_dims)
+    def forward(self, user_features, __, song_features, labels):
 
         # Expand augmented vectors to batch size
         au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
@@ -196,7 +189,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         model.train()
         epoch_train_loss = 0.0
         
-        for user_features, user_id, song_embedding, labels in train_dataloader:
+        for user_features, __, song_embedding, labels in train_dataloader:
      
             # Move to device
             user_features = user_features.to(device)
@@ -225,7 +218,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         # Validate
         epoch_val_loss = 0.0
         with torch.no_grad():
-            for user_features, user_id, song_embedding, labels in val_dataloader:
+            for user_features, __, song_embedding, labels in val_dataloader:
                 model.eval()
 
                 # Move to device
