@@ -177,7 +177,7 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 
-def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
+def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, patience:int = 10, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
     """
         Training function for training the models.
         Args:
@@ -193,7 +193,6 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
     model.to(device)
     
     best_val_loss = np.inf
-    patience = 10
     patience_counter = 0
     
 
@@ -253,7 +252,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         
         if epoch_val_loss > best_val_loss:
             # if not, we wait for 'patience_couter' amount of epochs to improve
-            if patience_counter > patience:
+            if patience_counter >= patience:
                 # if not we early stop
                 print('early stopped')
                 return
