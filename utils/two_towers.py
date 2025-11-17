@@ -51,6 +51,8 @@ class DualAugmentedTwoTower(nn.Module):
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
         self.av = nn.Parameter(torch.randn(aug_dim))  # item augmented vector
 
+
+
     def forward(self, user_features, user_id, song_features, labels):
         # convert user_ids to the embedded vector and concatinate with user features
         user_vec = self.user_id_embedder(user_id)
@@ -60,7 +62,6 @@ class DualAugmentedTwoTower(nn.Module):
         au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
         av_batch = self.av.expand(song_features.size(0), -1)  # shape (B, aug_dim)
         
-
         pu = self.user_tower(torch.cat((user_features, au_batch), dim=1))
         pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
 
@@ -69,22 +70,22 @@ class DualAugmentedTwoTower(nn.Module):
             pu_detach = pu.detach()
             pv_detach = pv.detach()
 
-        au = self.au + (pv_detach - self.au) * labels.unsqueeze(1) # au when label = 0, pv when label = 1
-        av = self.av + (pu_detach - self.av) * labels.unsqueeze(1) # av when label = 0, pu when label = 1
-
-        # Compute mimic losses (mean squared error)
-        loss_u = F.mse_loss(au, pv_detach) # 0 when label = 0
-        loss_v = F.mse_loss(av, pu_detach) # 0 when label = 0
-
         # Final dot-product score
         score = torch.sum(pu * pv, dim = 1)
 
-        return score, loss_u, loss_v
+        # Return pu_detach & pv_detach for loss computation
+        return score, pu_detach, pv_detach
 
-    def loss(self, score, loss_u, loss_v, labels, lambda_u = 1, lambda_v = 1):
+
+
+    def loss(self, score, pu_detach, pv_detach, labels, lambda_u = 1, lambda_v = 1):
         loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
+        loss_u = (F.mse_loss(self.au.expand_as(pv_detach), pv_detach) * labels).sum() / len(labels)
+        loss_v = (F.mse_loss(self.av.expand_as(pu_detach), pu_detach) * labels).sum() / len(labels)
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
+
+
     def plot(self, epochs:int, folder:Optional[Path] = None) -> None: 
         """
         Plot the current progress based on the historic loss data
@@ -124,6 +125,8 @@ class DualAugmentedTwoTower(nn.Module):
 
         plt.close(fig)
 
+
+
     def add_losses(self, train_loss:float, val_loss:float) -> None:
         """
         This function is just to add the historic data.
@@ -136,6 +139,8 @@ class DualAugmentedTwoTower(nn.Module):
 
         self.train_loss_history.append(train_loss)
         self.val_loss_history.append(val_loss)
+
+
 
     def save(self, folder:Path = Path("models")):
         """
@@ -154,6 +159,7 @@ class DualAugmentedTwoTower(nn.Module):
         torch.save(save_data, folder/f"{self.name}.pt")
 
     
+
     def load(self, filepath: Path, device='cuda'):
         """
         Load the model state dictionary from a file.
