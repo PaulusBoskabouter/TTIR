@@ -230,8 +230,10 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         # Validate
         epoch_val_loss = 0.0
         with torch.no_grad():
+                
+            model.eval()
+
             for user_features, user_id, song_embedding, labels in val_dataloader:
-                model.eval()
 
                 # Move to device
                 user_features = user_features.to(device)
