@@ -88,10 +88,18 @@ class DualAugmentedTwoTower(nn.Module):
         pu_detach = pu.detach()
         pv_detach = pv.detach()
 
-        # AMM loss
-        mask = labels.unsqueeze(1).float()
-        loss_u = (F.mse_loss(self.au.expand_as(pv_detach), pv_detach, reduction = None) * mask).sum() / len(labels)
-        loss_v = (F.mse_loss(self.av.expand_as(pu_detach), pu_detach, reduction = None) * mask).sum() / len(labels)
+        # Expand learnable aug vectors to batch
+        au_exp = self.au.unsqueeze(0).expand_as(pv_detach)  # (B, D)
+        av_exp = self.av.unsqueeze(0).expand_as(pu_detach)  # (B, D)
+
+        # per-element mse -> per-sample mse (mean over dim)
+        mse_u_per_sample = F.mse_loss(au_exp, pv_detach, reduction='none').mean(dim = 1)  # (B,)
+        mse_v_per_sample = F.mse_loss(av_exp, pu_detach, reduction='none').mean(dim = 1)  # (B,)
+
+        # mask positives and average only over positives
+        pos_mask = (labels.view(-1) == 1)
+        loss_u = mse_u_per_sample[pos_mask].mean()
+        loss_v = mse_v_per_sample[pos_mask].mean()
 
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
