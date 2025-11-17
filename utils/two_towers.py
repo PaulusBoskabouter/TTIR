@@ -53,7 +53,7 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 
-    def forward(self, user_features, user_id, song_features, labels):
+    def forward(self, user_features, user_id, song_features):
         # convert user_ids to the embedded vector and concatinate with user features
         user_vec = self.user_id_embedder(user_id)
         user_features = torch.cat([user_features, user_vec], dim = 1)  # shape (B, sum_embedding_dims)
@@ -213,7 +213,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             optimizer.zero_grad()
 
             # Forward pass
-            score, pu_detach, pv_detach = model(user_features, user_id, song_embedding, labels)
+            score, pu_detach, pv_detach = model(user_features, user_id, song_embedding)
 
             # Compute combined loss
             loss = model.loss(score, pu_detach, pv_detach, labels, lambda_u, lambda_v)
