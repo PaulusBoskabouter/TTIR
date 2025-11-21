@@ -64,37 +64,49 @@ def parse_embedding(s):
     return np.fromstring(s, sep=' ')
 
 
-def save_tensor_dataset(file_name:str, user_feats:list, user_ids:list, song_embeds:list, labels:list, file_loc:Path) -> None:
+def save_processed_data(user_feats, label_specific_feats, user_ids, song_embeds, song_labels, interactions, file:Path):
     # Convert to tensor and save
-    file_loc.mkdir(parents=True, exist_ok=True)
-
-    user_feats   = torch.from_numpy(np.stack(user_feats)).float().clone()
-    user_ids     = torch.from_numpy(np.stack(user_ids)).long().clone()
-    song_embeds  = torch.from_numpy(np.stack(song_embeds)).float().clone()
-    labels       = torch.from_numpy(np.stack(labels)).float().clone()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    
+    user_feats = torch.from_numpy(np.concatenate(user_feats, axis=0)).float().clone()
+    label_specific_feats = torch.from_numpy(np.concatenate(label_specific_feats, axis=0)).float().clone()
+    user_ids     = torch.from_numpy(np.concatenate(user_ids, axis=0)).long().clone()
+    interactions     = torch.from_numpy(np.concatenate(interactions, axis=0)).long().clone()
+    song_embeds  = torch.from_numpy(np.concatenate(song_embeds, axis=0)).float().clone()
+    song_labels       = torch.from_numpy(np.concatenate(song_labels, axis=0)).float().clone()
 
     data_to_save = {
-        "user_feats":   user_feats,
-        "user_ids": user_ids,
-        "song_embeds":  song_embeds,
-        "labels":     labels,
+        "user_feats":           user_feats,
+        "label_specific_feats": label_specific_feats,
+        "user_ids":             user_ids,
+        "song_embeds":          song_embeds,
+        "labels":               song_labels,
+        "interactions":         interactions
     }
-
-    file_loc.mkdir(exist_ok=True)
-    torch.save(data_to_save, file_loc / f"{file_name}.pt")
-
+    torch.save(data_to_save, file)
 
 def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, label_id:int=0) -> DataLoader:
     """
     Short function for reloading the afforementioned tensorfiles and store them into torch.utils.data.DataLoader. 
     """
 
-    loaded = torch.load(file_loc / f"{file_name}.pt", map_location="cpu")
-    user_feats   = loaded["user_feats"]
-    user_ids     = loaded["user_ids"]
-    song_embeds  = loaded["song_embeds"]
-    labels       = loaded["labels"][:, label_id]
+    loaded = torch.load(file_loc / f"{file_name}.pt", map_location="cpu", weights_only=False)
+    
+    user_feats              = loaded["user_feats"].squeeze(0)
+    label_specific_feats    = loaded["label_specific_feats"].squeeze(0)[:, label_id]
+    song_embeds             = loaded["song_embeds"].squeeze(0)
+    labels                  = loaded["labels"].squeeze(0)[:, label_id]
+    interactions            = loaded["interactions"].squeeze(0)
+
+    # n = user_feats.size(0) // 2
+    # user_feats           = user_feats[:n]
+    # label_specific_feats = label_specific_feats[:n]
+    # song_embeds          = song_embeds[:n]
+    # labels               = labels[:n]
+    # interactions         = interactions[:n]
+
 
     
-    dataset = TensorDataset(user_feats, user_ids, song_embeds, labels)
+    dataset = TensorDataset(user_feats, label_specific_feats, song_embeds, labels, interactions)
+    dataset = TensorDataset(user_feats, song_embeds, labels, interactions)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
