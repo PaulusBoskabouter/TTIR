@@ -37,8 +37,10 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
     song = row['item_id']
     timestamp = row['timestamp']
     pct_played = row['played_ratio_pct']
+    song_embed = row['normalized_embed']
 
-    
+
+
     
     # short helper function 
     _filter = lambda df : df[(df["uid"] == user)& (df["item_id"] == song) & (df["timestamp"] <= timestamp)] 
@@ -48,7 +50,7 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
     unlikes = _filter(unlikes)
     dislikes = _filter(dislikes)
     undislikes = _filter(undislikes)
-    user_data = _filter(user_data)
+    listens = _filter(user_data)
 
     
     netto_interactions = len(likes) + len(undislikes) - len(dislikes) - len(unlikes)
@@ -56,7 +58,7 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
     pct_80_label = 1 if pct_played >= 80.0 else 0
     pct_100_label = 1 if pct_played >= 100.0 else 0
 
-    multiple_listens_label = 1 if len(user_data) > 1 else 0
+    multiple_listens_label = 1 if len(listens) > 1 else 0
 
     return [interactions_label, multiple_listens_label, pct_100_label, pct_80_label], netto_interactions
 
@@ -74,33 +76,45 @@ def calc_centroid(data, label_id):
 
 
 
-def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, dataset_type:str, file_loc:Path) -> None:
+def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, dataset_type:str, file_loc:Path, 
+                              likes:pd.DataFrame, user_data:pd.DataFrame, unlikes:pd.DataFrame, dislikes:pd.DataFrame, undislikes:pd.DataFrame) -> None:
     """
     Extract features per user and save them into seperate files.
     Args:
         
     """
-    assert dataset_type in ["train", "val", 'test']
+    #assert dataset_type in ["train", "val", 'test']
 
     # For each user create their user features and determine last listened song (in embedding) + extract label
     for user in progress_bar(user_set, desc=f"{dataset_type}"):
         user_file = file_loc/f"{user}.pt"
         if not user_file.exists(): # Skip if we've already analysed this user.
             # Create subset of our data focussing on only one user at a time
-            subset = user_item_data[user_item_data['uid'] == user]
+            user_data = user_item_data[user_item_data['uid'] == user].copy()
+
+            
+
+
+            user_data[["labels", "net_interactions"]] = user_data.apply(
+            get_song_label_and_user_interacton,
+            axis=1,
+            args=(likes, user_data, unlikes, dislikes, undislikes),
+            result_type="expand") 
             
             user_feats = []
             label_specific_feats = []
             user_ids = []
             song_embeds = []
             song_labels = []
+            interactions = []
 
             # For all of the user timepoints spanning from 10 timepoints to max timepoints of the user, we analyse their song interacton 
-            for t in range(10, len(subset)-10):
+            for t in range(10, len(user_data)-10):
                 # Fetch datasubset
-                data = subset.iloc[:t]
+                data = user_data.iloc[:t]
                 song_embedding = data.iloc[-1]['normalized_embed']
                 labels = data.iloc[-1]['labels']
+                interaction_count = data.iloc[-1]['net_interactions']
                 
                 # Calculate the centroid of the liked songs and the dot product with the current song:
                 # index cheatsheet: [interactions_label, multiple_listens_label, pct_100_label, pct_80_label]
@@ -133,6 +147,7 @@ def extract_and_save_features(user_set:list, user_item_data:pd.DataFrame, datase
                 label_specific_feats.append(specific_feats)
                 song_embeds.append(song_embedding)
                 song_labels.append(labels)
+                interactions.append(interaction_count)
 
             # Save this user.
-            save_processed_data(user_feats, label_specific_feats, user_ids, song_embeds, song_labels, file=user_file)
+            save_processed_data(user_feats, label_specific_feats, user_ids, song_embeds, song_labels, interactions, file=user_file)

@@ -21,7 +21,7 @@ class Tower(nn.Module):
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
             nn.Linear(hidden_dim//2, output_dim),
-            nn.ReLU()
+            # nn.ReLU()
         )
 
     def forward(self, x):
@@ -30,7 +30,7 @@ class Tower(nn.Module):
 
 
 class DualAugmentedTwoTower(nn.Module):
-    def __init__(self, name:str, user_dim:int, item_dim:int, aug_dim:int, hidden_dim:int, embed_dim:int):
+    def __init__(self, name:str, user_dim:int, item_dim:int, hidden_dim:int, aug_dim:int):
         super().__init__()
 
         self.name = name
@@ -40,45 +40,84 @@ class DualAugmentedTwoTower(nn.Module):
 
         
         # Tower initialisations
-        self.user_tower = Tower(user_dim + aug_dim, hidden_dim, embed_dim)
-        self.item_tower = Tower(item_dim + aug_dim, hidden_dim, embed_dim)
+        self.user_tower = Tower(user_dim + aug_dim, hidden_dim, aug_dim)
+        self.item_tower = Tower(item_dim + aug_dim, hidden_dim, aug_dim)
 
         # Augmentation layers
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
         self.av = nn.Parameter(torch.randn(aug_dim))  # item augmented vector
 
-    def forward(self, user_features, __, song_features, labels):
+
+
+    def forward(self, user_features, song_features):
+        # convert user_ids to the embedded vector and concatinate with user features
 
         # Expand augmented vectors to batch size
         au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
         av_batch = self.av.expand(song_features.size(0), -1)  # shape (B, aug_dim)
         
-
         pu = self.user_tower(torch.cat((user_features, au_batch), dim=1))
         pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
-
-        # Adaptive mimic mechanism (stop gradient for embeddings)
-        with torch.no_grad():
-            pu_detach = pu.detach()
-            pv_detach = pv.detach()
-
-        au = self.au + (pv_detach - self.au) * labels.unsqueeze(1) # au when label = 0, pv when label = 1
-        av = self.av + (pu_detach - self.av) * labels.unsqueeze(1) # av when label = 0, pu when label = 1
-
-        # Compute mimic losses (mean squared error)
-        loss_u = F.mse_loss(au, pv_detach) # 0 when label = 0
-        loss_v = F.mse_loss(av, pu_detach) # 0 when label = 0
 
         # Final dot-product score
         score = torch.sum(pu * pv, dim = 1)
 
-        return score, loss_u, loss_v
+        # Return pu_detach & pv_detach for loss computation
+        return score, pu, pv
 
-    def loss(self, score, loss_u, loss_v, labels, lambda_u = 1, lambda_v = 1):
-        loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
+    # def forward(self, user_features, label_feats, song_features):
+    #     # convert user_ids to the embedded vector and concatinate with user features
+    #     user_features = torch.cat([user_features, label_feats], dim = 1)
+
+    #     # Expand augmented vectors to batch size
+    #     au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
+    #     av_batch = self.av.expand(song_features.size(0), -1)  # shape (B, aug_dim)
+        
+    #     pu = self.user_tower(torch.cat((user_features, au_batch), dim=1))
+    #     pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
+
+    #     # Final dot-product score
+    #     score = torch.sum(pu * pv, dim = 1)
+
+    #     # Return pu_detach & pv_detach for loss computation
+    #     return score, pu, pv
+
+
+    
+    def loss(self, score, pu, pv, labels, lambda_u = 1, lambda_v = 1, tau:float = 0.07):
+        """
+        Calculate & combine all loss terms including:
+            - Loss_p: dot-product loss
+            - Loss_u: AMM loss of user tower
+            - Loss_v: AMM loss of item tower
+        """
+        
+        # Dot-product loss
+        logits = score / tau # normalisation & dot product leads to small values, scaling helps the loss
+        loss_p = F.binary_cross_entropy_with_logits(logits, labels.float())
+
+        # Stop gradient
+        pu_detach = pu.detach()
+        pv_detach = pv.detach()
+
+        # Expand learnable aug vectors to batch
+        au_exp = self.au.unsqueeze(0).expand_as(pv_detach)  # (B, D)
+        av_exp = self.av.unsqueeze(0).expand_as(pu_detach)  # (B, D)
+
+        # per-element mse -> per-sample mse (mean over dim)
+        mse_u_per_sample = F.mse_loss(au_exp, pv_detach, reduction='none').mean(dim = 1)  # (B,)
+        mse_v_per_sample = F.mse_loss(av_exp, pu_detach, reduction='none').mean(dim = 1)  # (B,)
+
+        # mask positives and average only over positives
+        pos_mask = (labels.view(-1) == 1)
+        loss_u = mse_u_per_sample[pos_mask].mean()
+        loss_v = mse_v_per_sample[pos_mask].mean()
+
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
-    def plot(self, epochs:int, folder:Optional[Path] = None) -> None: 
+
+
+    def plot(self, epochs:int, last_epoch_saved:int, folder:Optional[Path] = None) -> None: 
         """
         Plot the current progress based on the historic loss data
         Args:
@@ -99,6 +138,7 @@ class DualAugmentedTwoTower(nn.Module):
 
         # Add some polish
         ax.set_xlim(1, epochs+1)
+        ax.axvline(x=last_epoch_saved, color="red", linestyle="--", linewidth=1) # Add a horizontal line of our best model (which is saved)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
         ax.set_title(f"Training progress for {self.name} model")
@@ -117,6 +157,8 @@ class DualAugmentedTwoTower(nn.Module):
 
         plt.close(fig)
 
+
+
     def add_losses(self, train_loss:float, val_loss:float) -> None:
         """
         This function is just to add the historic data.
@@ -129,6 +171,8 @@ class DualAugmentedTwoTower(nn.Module):
 
         self.train_loss_history.append(train_loss)
         self.val_loss_history.append(val_loss)
+
+
 
     def save(self, folder:Path = Path("models")):
         """
@@ -147,6 +191,7 @@ class DualAugmentedTwoTower(nn.Module):
         torch.save(save_data, folder/f"{self.name}.pt")
 
     
+
     def load(self, filepath: Path, device='cuda'):
         """
         Load the model state dictionary from a file.
@@ -164,7 +209,7 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 
-def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
+def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, patience:int = 10, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
     """
         Training function for training the models.
         Args:
@@ -180,30 +225,29 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
     model.to(device)
     
     best_val_loss = np.inf
-    patience = 10
     patience_counter = 0
-    
+    last_save = 0
 
     for epoch in range(1, num_epochs + 1):
         # Train
         model.train()
         epoch_train_loss = 0.0
-        
-        for user_features, __, song_embedding, labels in train_dataloader:
-     
+        # for user_features, label_features, song_embedding, labels, __ in
+        for user_features, song_embedding, labels, __ in train_dataloader:
             # Move to device
             user_features = user_features.to(device)
-            user_id = user_id.to(device)
+            #label_features = label_features.to(device)
             song_embedding = song_embedding.to(device)
             labels = labels.to(device)
 
             optimizer.zero_grad()
 
             # Forward pass
-            score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
+            # score, pu, pv = model(user_features, label_features, song_embedding)
+            score, pu, pv = model(user_features, song_embedding)
 
             # Compute combined loss
-            loss = model.loss(score, loss_u, loss_v, labels, lambda_u, lambda_v)
+            loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
 
             # Backward pass and optimization
             loss.backward()
@@ -218,17 +262,18 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         # Validate
         epoch_val_loss = 0.0
         with torch.no_grad():
-            for user_features, __, song_embedding, labels in val_dataloader:
-                model.eval()
+            # for user_features, label_features, song_embedding, labels, __ in
+            for user_features, song_embedding, labels, __ in val_dataloader:
 
                 # Move to device
                 user_features = user_features.to(device)
-                user_id = user_id.to(device)
+                # label_features = label_features.to(device)
                 song_embedding = song_embedding.to(device)
                 labels = labels.to(device)
 
-                score, loss_u, loss_v = model(user_features, user_id, song_embedding, labels)
-                loss = model.loss(score, loss_u, loss_v, labels, lambda_u, lambda_v)
+                #score, pu, pv = model(user_features, label_features, song_embedding)
+                score, pu, pv = model(user_features, song_embedding)
+                loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
 
                 epoch_val_loss += loss.item() * labels.size(0)
             
@@ -240,7 +285,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         
         if epoch_val_loss > best_val_loss:
             # if not, we wait for 'patience_couter' amount of epochs to improve
-            if patience_counter > patience:
+            if patience_counter >= patience:
                 # if not we early stop
                 print('early stopped')
                 return
@@ -251,6 +296,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             patience_counter = 0
             best_val_loss = epoch_val_loss
             model.save(Path("models"))
+            last_save = epoch
         
         model.add_losses(epoch_train_loss, epoch_val_loss)
-        model.plot(num_epochs, Path("models") / "plots")
+        model.plot(num_epochs, last_epoch_saved=last_save, folder=Path("models") / "plots")
