@@ -21,7 +21,7 @@ class Tower(nn.Module):
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
             nn.Linear(hidden_dim//2, output_dim),
-            # nn.ReLU()
+            nn.Softplus()
         )
 
     def forward(self, x):
@@ -93,8 +93,7 @@ class DualAugmentedTwoTower(nn.Module):
         """
         
         # Dot-product loss
-        logits = score / tau # normalisation & dot product leads to small values, scaling helps the loss
-        loss_p = F.binary_cross_entropy_with_logits(logits, labels.float())
+        loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
 
         # Stop gradient
         pu_detach = pu.detach()
