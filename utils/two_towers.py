@@ -21,7 +21,7 @@ class Tower(nn.Module):
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
             nn.Linear(hidden_dim//2, output_dim),
-            nn.Softplus()
+            # nn.Softplus()
         )
 
     def forward(self, x):
@@ -38,7 +38,6 @@ class DualAugmentedTwoTower(nn.Module):
         self.train_loss_history = []
         self.val_loss_history = []
 
-        
         # Tower initialisations
         self.user_tower = Tower(user_dim + aug_dim, hidden_dim, aug_dim)
         self.item_tower = Tower(item_dim + aug_dim, hidden_dim, aug_dim)
@@ -46,6 +45,9 @@ class DualAugmentedTwoTower(nn.Module):
         # Augmentation layers
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
         self.av = nn.Parameter(torch.randn(aug_dim))  # item augmented vector
+
+        # Learnable scaling parameter
+        self.log_tau = nn.Parameter(torch.log(torch.tensor(0.07)))
 
 
 
@@ -91,9 +93,13 @@ class DualAugmentedTwoTower(nn.Module):
             - Loss_u: AMM loss of user tower
             - Loss_v: AMM loss of item tower
         """
+
+        # Scale score
+        tau = torch.exp(self.log_tau)
+        logits = score / tau
         
         # Dot-product loss
-        loss_p = F.binary_cross_entropy_with_logits(score, labels.float())
+        loss_p = F.binary_cross_entropy_with_logits(logits, labels.float())
 
         # Stop gradient
         pu_detach = pu.detach()
