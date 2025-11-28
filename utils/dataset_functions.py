@@ -93,14 +93,15 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
     loaded = torch.load(file_loc / f"{file_name}.pt", map_location="cpu", weights_only=False)
     
 
-    user_feats              = loaded["user_feats"].squeeze(0)
-    song_embeds             = loaded["song_embeds"].squeeze(0)
-    labels                  = loaded["labels"].squeeze(0)[:, label_id]
-    interactions            = loaded["interactions"].squeeze(0)
+    user_feats      = loaded["user_feats"].squeeze(0)
+    song_embeds     = loaded["song_embeds"].squeeze(0)
+    user_ids        = loaded["user_ids"].squeeze(0)
+    labels          = loaded["labels"].squeeze(0)[:, label_id]
+    interactions    = loaded["interactions"].squeeze(0)
 
 
 
     
     #dataset = TensorDataset(user_feats, label_specific_feats, song_embeds, labels, interactions)
-    dataset = TensorDataset(user_feats, song_embeds, labels, interactions)
+    dataset = TensorDataset(user_feats, song_embeds, labels, interactions, user_ids)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)

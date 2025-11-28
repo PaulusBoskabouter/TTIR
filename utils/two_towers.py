@@ -20,8 +20,10 @@ class Tower(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.ReLU(),
-            nn.Linear(hidden_dim//2, output_dim),
-            # nn.Softplus()
+            nn.Linear(hidden_dim//2, hidden_dim//4),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//4, output_dim),
+            nn.ReLU()
         )
 
     def forward(self, x):
@@ -30,7 +32,7 @@ class Tower(nn.Module):
 
 
 class DualAugmentedTwoTower(nn.Module):
-    def __init__(self, name:str, user_dim:int, item_dim:int, hidden_dim:int, aug_dim:int):
+    def __init__(self, name:str, user_dim:int, item_dim:int, hidden_dim:int, aug_dim:int, user_embed_dim):
         super().__init__()
 
         self.name = name
@@ -38,21 +40,25 @@ class DualAugmentedTwoTower(nn.Module):
         self.train_loss_history = []
         self.val_loss_history = []
 
+        # user id
+        self.user_id_embedder = nn.Embedding(4457, user_embed_dim, padding_idx=0)
+
         # Tower initialisations
-        self.user_tower = Tower(user_dim + aug_dim, hidden_dim, aug_dim)
+        self.user_tower = Tower(user_dim + aug_dim+ user_embed_dim, hidden_dim, aug_dim)
         self.item_tower = Tower(item_dim + aug_dim, hidden_dim, aug_dim)
 
         # Augmentation layers
         self.au = nn.Parameter(torch.randn(aug_dim))  # user augmented vector
         self.av = nn.Parameter(torch.randn(aug_dim))  # item augmented vector
 
-        # Learnable scaling parameter
-        self.log_tau = nn.Parameter(torch.log(torch.tensor(0.07)))
+        
 
 
 
-    def forward(self, user_features, song_features):
+    def forward(self, user_features, song_features, user_id):
         # convert user_ids to the embedded vector and concatinate with user features
+        user_vec = self.user_id_embedder(user_id)
+        user_features = torch.cat([user_features, user_vec], dim = 1)
 
         # Expand augmented vectors to batch size
         au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
@@ -62,27 +68,10 @@ class DualAugmentedTwoTower(nn.Module):
         pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
 
         # Final dot-product score
-        score = torch.sum(pu * pv, dim = 1)
+        score = (pu * pv).sum(dim = 1)
 
         # Return pu_detach & pv_detach for loss computation
         return score, pu, pv
-
-    # def forward(self, user_features, label_feats, song_features):
-    #     # convert user_ids to the embedded vector and concatinate with user features
-    #     user_features = torch.cat([user_features, label_feats], dim = 1)
-
-    #     # Expand augmented vectors to batch size
-    #     au_batch = self.au.expand(user_features.size(0), -1)  # shape (B, aug_dim)
-    #     av_batch = self.av.expand(song_features.size(0), -1)  # shape (B, aug_dim)
-        
-    #     pu = self.user_tower(torch.cat((user_features, au_batch), dim=1))
-    #     pv = self.item_tower(torch.cat((song_features, av_batch), dim=1))
-
-    #     # Final dot-product score
-    #     score = torch.sum(pu * pv, dim = 1)
-
-    #     # Return pu_detach & pv_detach for loss computation
-    #     return score, pu, pv
 
 
     
@@ -94,12 +83,9 @@ class DualAugmentedTwoTower(nn.Module):
             - Loss_v: AMM loss of item tower
         """
 
-        # Scale score
-        tau = torch.exp(self.log_tau)
-        logits = score / tau
         
         # Dot-product loss
-        loss_p = F.binary_cross_entropy_with_logits(logits, labels.float())
+        loss_p = F.binary_cross_entropy(score, labels)#F.binary_cross_entropy_with_logits(score, labels.float())
 
         # Stop gradient
         pu_detach = pu.detach()
@@ -109,15 +95,29 @@ class DualAugmentedTwoTower(nn.Module):
         au_exp = self.au.unsqueeze(0).expand_as(pv_detach)  # (B, D)
         av_exp = self.av.unsqueeze(0).expand_as(pu_detach)  # (B, D)
 
+    
+        labels = labels.unsqueeze(1).float()    # [B, 1]
+        
+
+        diff_u = labels * (au_exp - pv_detach)    # [B, D]
+        diff_v = labels * (av_exp - pu_detach)
+
+        loss_u = diff_u.pow(2).mean()
+        loss_v = diff_v.pow(2).mean()
+        
+        
         # per-element mse -> per-sample mse (mean over dim)
-        mse_u_per_sample = F.mse_loss(au_exp, pv_detach, reduction='none').mean(dim = 1)  # (B,)
-        mse_v_per_sample = F.mse_loss(av_exp, pu_detach, reduction='none').mean(dim = 1)  # (B,)
 
-        # mask positives and average only over positives
-        pos_mask = (labels.view(-1) == 1)
-        loss_u = mse_u_per_sample[pos_mask].mean()
-        loss_v = mse_v_per_sample[pos_mask].mean()
 
+        # mse_u_per_sample = F.mse_loss(au_exp, pv_detach, reduction='none').mean(dim = 1)  # (B,)
+        # mse_v_per_sample = F.mse_loss(av_exp, pu_detach, reduction='none').mean(dim = 1)  # (B,)
+
+        # # mask positives and average only over positives
+        # pos_mask = (labels.view(-1) == 1)
+        # loss_u = mse_u_per_sample[pos_mask].mean()
+        # loss_v = mse_v_per_sample[pos_mask].mean()
+        # print(loss_u)
+        # return 0
         return loss_p + lambda_u * loss_u + lambda_v * loss_v
     
 
@@ -238,9 +238,10 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         model.train()
         epoch_train_loss = 0.0
         # for user_features, label_features, song_embedding, labels, __ in
-        for user_features, song_embedding, labels, __ in train_dataloader:
+        for user_features, song_embedding, labels, __, uidx in train_dataloader:
             # Move to device
             user_features = user_features.to(device)
+            uidx = uidx.to(device)
             #label_features = label_features.to(device)
             song_embedding = song_embedding.to(device)
             labels = labels.to(device)
@@ -249,7 +250,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
 
             # Forward pass
             # score, pu, pv = model(user_features, label_features, song_embedding)
-            score, pu, pv = model(user_features, song_embedding)
+            score, pu, pv = model(user_features, song_embedding, uidx)
 
             # Compute combined loss
             loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
@@ -268,16 +269,17 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         epoch_val_loss = 0.0
         with torch.no_grad():
             # for user_features, label_features, song_embedding, labels, __ in
-            for user_features, song_embedding, labels, __ in val_dataloader:
+            for user_features, song_embedding, labels, __, uidx in val_dataloader:
 
                 # Move to device
                 user_features = user_features.to(device)
+                uidx = uidx.to(device)
                 # label_features = label_features.to(device)
                 song_embedding = song_embedding.to(device)
                 labels = labels.to(device)
 
                 #score, pu, pv = model(user_features, label_features, song_embedding)
-                score, pu, pv = model(user_features, song_embedding)
+                score, pu, pv = model(user_features, song_embedding, uidx)
                 loss = model.loss(score, pu, pv, labels, lambda_u, lambda_v)
 
                 epoch_val_loss += loss.item() * labels.size(0)
