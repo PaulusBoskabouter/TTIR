@@ -70,6 +70,8 @@ class DualAugmentedTwoTower(nn.Module):
         # Final dot-product score
         score = (pu * pv).sum(dim = 1)
 
+        F.sigmoid(score)
+
         # Return pu_detach & pv_detach for loss computation
         return score, pu, pv
 

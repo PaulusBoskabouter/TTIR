@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 from utils.dataset_functions import save_processed_data
 from tqdm import tqdm_notebook as progress_bar
+import numpy as np
 
 
 
@@ -79,6 +80,10 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
     unlikes = unlikes.groupby('uid')
     dislikes = dislikes.groupby('uid')
     undislikes = undislikes.groupby('uid')
+
+    
+
+
     # For each user create their user features and determine last listened song (in embedding) + extract label
     for user in progress_bar(user_set, desc=""):
         user_file = file_loc/f"{user}.pt"
@@ -90,7 +95,6 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
             song_embeds = []
             song_labels = []
             interactions = []
-
             
 
             interactions_total = 0
