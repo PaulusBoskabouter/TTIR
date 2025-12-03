@@ -30,7 +30,7 @@ class Tower(nn.Module):
 
 
 class DualAugmentedTwoTower(nn.Module):
-    def __init__(self, name:str, user_dim:int, item_dim:int, hidden_dim:int, output_dim:int, user_embed_dim):
+    def __init__(self, name:str, user_dim:int, item_dim:int, hidden_dim:int, output_dim:int, id_embed_dim:int):
         super().__init__()
 
         self.name = name
@@ -39,10 +39,11 @@ class DualAugmentedTwoTower(nn.Module):
         self.val_loss_history = []
 
         # user id
-        self.user_id_embedder = nn.Embedding(4457, user_embed_dim, padding_idx=0)
+        self.user_id_embedder = nn.Embedding(5427, id_embed_dim, padding_idx=0)
+        self.song_id_embedder = nn.Embedding(3193, id_embed_dim, padding_idx=0)
 
         # Tower initialisations
-        self.user_tower = Tower(user_dim + user_embed_dim, hidden_dim, output_dim)#, hidden_dim, output_dim)
+        self.user_tower = Tower(user_dim, hidden_dim, output_dim)
         self.item_tower = Tower(item_dim, hidden_dim, output_dim)
 
 
@@ -50,14 +51,19 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 
-    def forward(self, user_features, song_features, user_id):
-        # convert user_ids to the embedded vector and concatinate with user features
+    def forward(self, user_features, song_features, user_id, song_id):
+        # Embed our ids
         user_vec = self.user_id_embedder(user_id)
-        user_features = torch.cat([user_features, user_vec], dim = 1)
+        song_vec = self.song_id_embedder(song_id)
 
         
         yu = self.user_tower(user_features)
         yv = self.item_tower(song_features)
+
+        # Concatenate output with lookuptable 
+        yu = torch.cat([yu, user_vec], dim = 1)
+        yv = torch.cat([yv, song_vec], dim = 1)
+
 
         # Final dot-product score
         dot = (yu * yv).sum(dim = 1)
@@ -201,19 +207,18 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         model.train()
         epoch_train_loss = 0.0
         # for user_features, label_features, song_embedding, labels, __ in
-        for user_features, song_embedding, labels, __, uidx in train_dataloader:
+        for user_features, song_embeddings, labels, _interactions, user_ids, song_ids in train_dataloader:
+
             # Move to device
             user_features = user_features.to(device)
-            uidx = uidx.to(device)
-            #label_features = label_features.to(device)
-            song_embedding = song_embedding.to(device)
+            user_ids = user_ids.to(device)
+            song_ids = song_ids.to(device)
+            song_embeddings = song_embeddings.to(device)
             labels = labels.to(device)
 
             optimizer.zero_grad()
 
-            # Forward pass
-            # score, pu, pv = model(user_features, label_features, song_embedding)
-            score = model(user_features, song_embedding, uidx)
+            score = model(user_features, song_embeddings, user_ids, song_ids)
 
             # Compute combined loss
             loss = model.loss(score, labels)
@@ -232,17 +237,17 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         epoch_val_loss = 0.0
         with torch.no_grad():
             # for user_features, label_features, song_embedding, labels, __ in
-            for user_features, song_embedding, labels, __, uidx in val_dataloader:
+            for user_features, song_embeddings, labels, _interactions, user_ids, song_ids in val_dataloader:
 
                 # Move to device
                 user_features = user_features.to(device)
-                uidx = uidx.to(device)
-                # label_features = label_features.to(device)
-                song_embedding = song_embedding.to(device)
+                user_ids = user_ids.to(device)
+                song_ids = song_ids.to(device)
+                song_embeddings = song_embeddings.to(device)
                 labels = labels.to(device)
 
                 #score, pu, pv = model(user_features, label_features, song_embedding)
-                score = model(user_features, song_embedding, uidx)
+                score = model(user_features, song_embeddings, user_ids, song_ids)
 
                 # Compute combined loss
                 loss = model.loss(score, labels)
@@ -255,7 +260,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
         clear_output(wait=True) # make sure our notebook doesn't get cluttered
         print(f"Epoch: [{epoch}/{num_epochs}]")
         
-        if epoch_val_loss > best_val_loss:
+        if epoch_val_loss >= best_val_loss:
             # if not, we wait for 'patience_couter' amount of epochs to improve
             if patience_counter >= patience:
                 # if not we early stop

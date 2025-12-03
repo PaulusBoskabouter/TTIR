@@ -92,9 +92,11 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
             user_data = user_item_data[user_item_data['uid'] == user].copy()
             user_feats = []
             user_ids = []
+            song_ids = []
             song_embeds = []
             song_labels = []
             interactions = []
+            
             
 
             interactions_total = 0
@@ -104,6 +106,7 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
                 data = user_data.iloc[:t]
                 song_embedding = data.iloc[-1]['normalized_embed']
                 current_row = data.iloc[-1]
+                song_id = current_row['item_id']
 
                 labels, interaction_count = get_song_label_and_user_interacton(current_row, likes, data, unlikes, dislikes, undislikes)
                 interactions_total += interaction_count
@@ -122,9 +125,11 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
             
                 user_feats.append(features)
                 user_ids.append(user)
+                song_ids.append(song_id)
                 song_embeds.append(song_embedding.tolist())
                 song_labels.append(labels)
                 interactions.append(interaction_count)
 
+
             # Save this user.
-            save_processed_data(user_feats, user_ids, song_embeds, song_labels, interactions, file=user_file)
+            save_processed_data(user_feats, user_ids, song_ids, song_embeds, song_labels, interactions, file=user_file)

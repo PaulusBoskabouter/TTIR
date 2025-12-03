@@ -64,12 +64,13 @@ def parse_embedding(s):
     return np.fromstring(s, sep=' ')
 
 
-def save_processed_data(user_feats, user_ids, song_embeds, song_labels, interactions, file:Path):#label_specific_feats, user_ids, song_embeds, song_labels, interactions, file:Path):
+def save_processed_data(user_feats, user_ids, song_ids, song_embeds, song_labels, interactions, file:Path):#label_specific_feats, user_ids, song_embeds, song_labels, interactions, file:Path):
     # Convert to tensor and save
     file.parent.mkdir(parents=True, exist_ok=True)
     
     user_feats = torch.tensor(user_feats).float()
     user_ids     = torch.tensor(user_ids).long()
+    song_ids     = torch.tensor(song_ids).long()
     interactions     = torch.tensor(interactions).long()
     song_embeds  = torch.tensor(song_embeds).float().clone()
     song_labels       = torch.tensor(song_labels).float().clone()
@@ -77,8 +78,8 @@ def save_processed_data(user_feats, user_ids, song_embeds, song_labels, interact
 
     data_to_save = {
         "user_feats":           user_feats,
-        #"label_specific_feats": label_specific_feats,
         "user_ids":             user_ids,
+        "song_ids":             song_ids,
         "song_embeds":          song_embeds,
         "labels":               song_labels,
         "interactions":         interactions
@@ -96,6 +97,7 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
     user_feats      = loaded["user_feats"].squeeze(0)
     song_embeds     = loaded["song_embeds"].squeeze(0)
     user_ids        = loaded["user_ids"].squeeze(0)
+    song_ids        = loaded["song_ids"].squeeze(0)
     labels          = loaded["labels"].squeeze(0)[:, label_id]
     interactions    = loaded["interactions"].squeeze(0)
 
@@ -103,5 +105,5 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
 
     
     #dataset = TensorDataset(user_feats, label_specific_feats, song_embeds, labels, interactions)
-    dataset = TensorDataset(user_feats, song_embeds, labels, interactions, user_ids)
+    dataset = TensorDataset(user_feats, song_embeds, labels, interactions, user_ids, song_ids)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
