@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from torch.optim import Adam
 from typing import Optional
+import faiss
 
 
 
@@ -45,9 +46,10 @@ class DualAugmentedTwoTower(nn.Module):
         # Tower initialisations
         self.user_tower = Tower(user_dim, hidden_dim, output_dim)
         self.item_tower = Tower(item_dim, hidden_dim, output_dim)
-
-
         
+        # ANN Index
+        M = 32      # Higher is more accurate but slower
+        self.index = faiss.IndexHNSWFlat(output_dim + id_embed_dim, M)
 
 
 
@@ -56,7 +58,6 @@ class DualAugmentedTwoTower(nn.Module):
         user_vec = self.user_id_embedder(user_id)
         song_vec = self.song_id_embedder(song_id)
 
-        
         yu = self.user_tower(user_features)
         yv = self.item_tower(song_features)
 
@@ -64,13 +65,44 @@ class DualAugmentedTwoTower(nn.Module):
         yu = torch.cat([yu, user_vec], dim = 1)
         yv = torch.cat([yv, song_vec], dim = 1)
 
-
         # Final dot-product score
         dot = (yu * yv).sum(dim = 1)
 
         y = F.sigmoid(dot)
 
         return y
+    
+    
+    
+    """
+    Single item tower pass
+    """
+    def yv(self, song_features, song_id):
+        # Embed our ids
+        song_vec = self.song_id_embedder(song_id)
+
+        yv = self.item_tower(song_features)
+
+        # Concatenate output with lookuptable 
+        yv = torch.cat([yv, song_vec], dim = 1)
+
+        return yv
+    
+
+
+    """
+    Single user tower pass
+    """
+    def uv(self, user_features, user_id):
+        # Embed our ids
+        user_vec = self.user_id_embedder(user_id)
+
+        uv = self.user_tower(user_features)
+
+        # Concatenate output with lookuptable 
+        uv = torch.cat([uv, user_vec], dim = 1)
+
+        return uv
 
 
     
@@ -82,12 +114,27 @@ class DualAugmentedTwoTower(nn.Module):
             - Loss_v: AMM loss of item tower
         """
 
-        
         # Dot-product loss
         loss_p = F.binary_cross_entropy(score, labels)#F.binary_cross_entropy_with_logits(score, labels.float())
 
-       
         return loss_p
+    
+
+
+    """
+    Creates index for reccommendation query lookup
+    (Expects Numpy array)
+    """
+    def create_index(self, song_embeddings):
+        self.index.add(song_embeddings)
+    
+    
+    
+    """
+    Get k approximate nearest neighbours
+    """
+    def recommendations(self, query, k):
+        return self.index.search(query, k)
     
 
 
@@ -98,7 +145,6 @@ class DualAugmentedTwoTower(nn.Module):
             epochs (int): The number of epochs the model should be trained on, purely used for the xlim.
             folder (Path): If it is not None, we use it to save the plot to this folder.
         """
-
 
         x = np.arange(1, len(self.val_loss_history) + 1)
         train_losses = np.array(self.train_loss_history)
@@ -119,8 +165,6 @@ class DualAugmentedTwoTower(nn.Module):
         ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
         ax.legend(loc="upper right")
 
-
-        
         if folder is not None:
             folder.mkdir(parents=True, exist_ok=True)
             fig.savefig(folder/ f"{self.name}.png", bbox_inches="tight", dpi=300)
@@ -177,7 +221,6 @@ class DualAugmentedTwoTower(nn.Module):
         self.load_state_dict(data['weights'])
         self.val_loss_history   = data['val_losses']
         self.train_loss_history = data['train_losses']
-
 
 
 
