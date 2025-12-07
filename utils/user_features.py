@@ -60,14 +60,11 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
     counts = user_data['item_id'].value_counts()
 
     netto_interactions = likes_count + undislikes_count - dislikes_count - unlikes_count
-    multiple_listens_label = int(counts.get(song, 0) > 1)
-    interactions_label = int(netto_interactions > 0)
-    pct_80_label = int(pct_played >= 80.0)
-    pct_100_label = int(pct_played >= 100.0)
-
+    binary_label = int(pct_played >= 100.0)
+    continueous_label = min(pct_played / 100.0, 1.0)
     
 
-    return [interactions_label, multiple_listens_label, pct_100_label, pct_80_label], netto_interactions
+    return [binary_label, continueous_label], netto_interactions
 
 
 def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.DataFrame, likes:pd.DataFrame, unlikes:pd.DataFrame, dislikes:pd.DataFrame, undislikes:pd.DataFrame) -> None:
@@ -110,7 +107,6 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
 
                 labels, interaction_count = get_song_label_and_user_interacton(current_row, likes, data, unlikes, dislikes, undislikes)
                 interactions_total += interaction_count
-                
 
                 # User interaction and listening statistics:
                 played_pct_avg = data['played_ratio_pct'].mean()
