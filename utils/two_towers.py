@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from torch.optim import Adam
 from typing import Optional
-
+import faiss
 
 
 class Tower(nn.Module):
@@ -46,6 +46,10 @@ class DualAugmentedTwoTower(nn.Module):
         self.user_tower = Tower(5, hidden_dim, output_dim)
         self.item_tower = Tower(128, hidden_dim, output_dim)
 
+        # ANN Index
+        M = 32      # Higher is more accurate but slower
+        self.index = faiss.IndexHNSWFlat(output_dim + id_embed_dim, M)
+
 
         
 
@@ -57,21 +61,71 @@ class DualAugmentedTwoTower(nn.Module):
         song_vec = self.song_id_embedder(song_id)
 
         
-        yu = self.user_tower(user_features)
-        yv = self.item_tower(song_features)
+        y_user = self.user_tower(user_features)
+        y_song = self.item_tower(song_features)
 
         # Concatenate output with lookuptable 
-        yu = torch.cat([yu, user_vec], dim = 1)
-        yv = torch.cat([yv, song_vec], dim = 1)
+        yu = torch.cat([y_user, user_vec], dim = 1)
+        ys = torch.cat([y_song, song_vec], dim = 1)
 
 
         # Final dot-product score
-        dot = (yu * yv).sum(dim = 1)
+        dot = (yu * ys).sum(dim = 1)
 
         y = F.sigmoid(dot)
 
         return y
 
+
+    
+    
+    def song_pass(self, song_features, song_id):
+        """
+        Single item tower pass
+        """
+        # Embed our ids
+        song_vec = self.song_id_embedder(song_id)
+
+        y = self.item_tower(song_features)
+
+        # Concatenate output with lookuptable 
+        y = torch.cat([y, song_vec], dim = 1)
+
+        return y
+    
+
+
+    
+    def user_pass(self, user_features, user_id):
+        """
+        Single user tower pass
+        """
+        # Embed our ids
+        user_vec = self.user_id_embedder(user_id)
+
+        y = self.user_tower(user_features)
+
+        # Concatenate output with lookuptable 
+        y = torch.cat([y, user_vec], dim = 1)
+
+        return y
+    
+    
+    def create_index(self, song_embeddings):
+        """
+        Creates index for reccommendation query lookup
+        (Expects Numpy array)
+        """
+        self.index.add(song_embeddings)
+    
+    
+    
+    
+    def recommendations(self, query, k):
+        """
+        Get k approximate nearest neighbours
+        """
+        return self.index.search(query, k)
 
     
     def loss(self, score, labels):
