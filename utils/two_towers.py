@@ -84,14 +84,15 @@ class DualAugmentedTwoTower(nn.Module):
         Single item tower pass
         """
         # Embed our ids
-        song_vec = self.song_id_embedder(song_id)
+        with torch.no_grad():
+            song_vec = self.song_id_embedder(song_id)
 
-        y = self.item_tower(song_features)
+            y = self.item_tower(song_features)
 
-        # Concatenate output with lookuptable 
-        y = torch.cat([y, song_vec], dim = 1)
+            # Concatenate output with lookuptable 
+            y = torch.cat([y, song_vec], dim = 1)
 
-        return y
+            return y
     
 
 
@@ -101,14 +102,15 @@ class DualAugmentedTwoTower(nn.Module):
         Single user tower pass
         """
         # Embed our ids
-        user_vec = self.user_id_embedder(user_id)
+        with torch.no_grad():
+            user_vec = self.user_id_embedder(user_id)
 
-        y = self.user_tower(user_features)
+            y = self.user_tower(user_features)
 
-        # Concatenate output with lookuptable 
-        y = torch.cat([y, user_vec], dim = 1)
+            # Concatenate output with lookuptable 
+            y = torch.cat([y, user_vec], dim = 1)
 
-        return y
+            return y
     
     
     def create_index(self, song_embeddings):
