@@ -57,7 +57,6 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
     unlikes_count = count_interactions(unlikes)
     dislikes_count = count_interactions(dislikes)
     undislikes_count = count_interactions(undislikes)
-    counts = user_data['item_id'].value_counts()
 
     netto_interactions = likes_count + undislikes_count - dislikes_count - unlikes_count
     binary_label = int(pct_played >= 100.0)

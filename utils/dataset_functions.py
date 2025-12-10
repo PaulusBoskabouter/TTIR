@@ -7,7 +7,6 @@ To keep the notebook as uncluttered as possible, I've thrown a lot of functions 
 # from __future__ import annotations
 from pathlib import Path
 import numpy as np
-import numpy as np 
 import torch
 from torch.utils.data import DataLoader, TensorDataset 
 from typing import Literal
@@ -98,12 +97,14 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
     song_embeds     = loaded["song_embeds"].squeeze(0)
     user_ids        = loaded["user_ids"].squeeze(0)
     song_ids        = loaded["song_ids"].squeeze(0)
-    labels          = loaded["labels"].squeeze(0)[:, label_id]
     interactions    = loaded["interactions"].squeeze(0)
+    labels          = loaded["labels"].squeeze(0)
+    if label_id < 2:
+        labels          = loaded["labels"].squeeze(0)[:, label_id]
 
 
 
     
     #dataset = TensorDataset(user_feats, label_specific_feats, song_embeds, labels, interactions)
     dataset = TensorDataset(user_feats, song_embeds, labels, interactions, user_ids, song_ids)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False)
