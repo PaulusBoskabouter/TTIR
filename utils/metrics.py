@@ -36,8 +36,9 @@ def metrics(ranking, K, t = 0.8):
     R       = [recall(ranking, k, t)    for k in K]
     F1      = [f1_score(ranking, k, t)  for k in K]
     N_K     = [NDCG(ranking, k)         for k in K]
+    M       = [average_precision(ranking, t)]
     N       = [NDCG(ranking)]
-    metrics = np.array(P + R + F1 + N_K + N)
+    metrics = np.array(P + R + F1 + N_K + M + N)
 
     return metrics
 
@@ -51,8 +52,9 @@ def aggregate(metrics, K):
     R       = [f"Recall @ {k}"      for k in K]
     F1      = [f"F1-score @ {k}"    for k in K]
     N_K     = [f"NDCG @ {k}"        for k in K]
+    M       = ["MAP"]
     N       = ["NDCG"]
-    labels = np.array(P + R + F1 + N_K + N)
+    labels = np.array(P + R + F1 + N_K + M + N)
 
     # Aggregate metrics
     aggregate = np.mean(metrics, axis = 0)
