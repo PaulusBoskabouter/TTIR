@@ -1,5 +1,5 @@
 dataset/unprocessed/
 dataset/processed/*
-!dataset/processed/subset.pt
+!dataset/processed/song_subset.pt
 
 utils/__pycache__

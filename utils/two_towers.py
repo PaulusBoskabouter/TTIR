@@ -127,7 +127,8 @@ class DualAugmentedTwoTower(nn.Module):
         """
         Get k approximate nearest neighbours
         """
-        return self.index.search(query, k)
+        distances, indices = self.index.search(query, k)
+        return distances[0], indices[0]
 
     
     def loss(self, score, labels):
