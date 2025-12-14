@@ -119,8 +119,7 @@ class DualAugmentedTwoTower(nn.Module):
         (Expects Numpy array)
         """
         self.index.add(song_embeddings)
-    
-    
+        
     
     
     def recommendations(self, query, k):
@@ -128,8 +127,10 @@ class DualAugmentedTwoTower(nn.Module):
         Get k approximate nearest neighbours
         """
         distances, indices = self.index.search(query, k)
-        return distances[0], indices[0]
+        return distances[0].tolist(), indices[0].tolist()
 
+    def query_item_distance(self, query, song):
+        return torch.sum((query - song) ** 2).item()
     
     def loss(self, score, labels):
         """
