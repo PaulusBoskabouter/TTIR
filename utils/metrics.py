@@ -55,9 +55,9 @@ def aggregate(metrics, K):
     M       = ["MAP"]
     N       = ["NDCG"]
     labels = np.array(P + R + F1 + N_K + M + N)
-
     # Aggregate metrics
     aggregate = np.mean(metrics, axis = 0)
+
 
     # Save & return in dictionary
     return {str(key): float(value) for key, value in zip(labels, aggregate)}
