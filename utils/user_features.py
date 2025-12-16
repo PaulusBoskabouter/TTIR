@@ -21,9 +21,7 @@ def get_interactions(df_by_uid, user, song, timestamp):
     return (df['item_id'].eq(song) & (df['timestamp'] <= timestamp)).sum()
 
 
-def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_data:pd.DataFrame,
-                                       unlikes:pd.DataFrame, dislikes:pd.DataFrame, undislikes:pd.DataFrame
-                                       ) -> tuple[int, int]:
+def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, dislikes:pd.DataFrame) -> tuple[int, int]:
     """
     (Pardon the horrendous long function name)
     Aggregate a user's interactions with a specific song up to ``timestamp``.
@@ -54,31 +52,24 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, user_
         return mask.sum()
 
     likes_count = count_interactions(likes)
-    unlikes_count = count_interactions(unlikes)
     dislikes_count = count_interactions(dislikes)
-    undislikes_count = count_interactions(undislikes)
 
-    netto_interactions = likes_count + undislikes_count - dislikes_count - unlikes_count
-    binary_label = int(pct_played >= 100.0)
+    netto_interactions = likes_count - dislikes_count
+    binary_label = int(pct_played >= 80.0)
     continueous_label = min(pct_played / 100.0, 1.0)
     
 
     return [binary_label, continueous_label], netto_interactions
 
 
-def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.DataFrame, likes:pd.DataFrame, unlikes:pd.DataFrame, dislikes:pd.DataFrame, undislikes:pd.DataFrame) -> None:
+def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.DataFrame, likes:pd.DataFrame, dislikes:pd.DataFrame) -> None:
     """
     Extract features per user and save them into seperate files.
     Args:
         
     """
     likes = likes.groupby('uid')
-    unlikes = unlikes.groupby('uid')
     dislikes = dislikes.groupby('uid')
-    undislikes = undislikes.groupby('uid')
-
-    
-
 
     # For each user create their user features and determine last listened song (in embedding) + extract label
     for user in progress_bar(user_set, desc=""):
@@ -104,7 +95,7 @@ def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.Da
                 current_row = data.iloc[-1]
                 song_id = current_row['item_id']
 
-                labels, interaction_count = get_song_label_and_user_interacton(current_row, likes, data, unlikes, dislikes, undislikes)
+                labels, interaction_count = get_song_label_and_user_interacton(current_row, likes, dislikes)
                 interactions_total += interaction_count
 
                 # User interaction and listening statistics:

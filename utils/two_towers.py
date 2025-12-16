@@ -49,6 +49,7 @@ class DualAugmentedTwoTower(nn.Module):
         # ANN Index
         M = 32      # Higher is more accurate but slower
         self.index = faiss.IndexHNSWFlat(output_dim + id_embed_dim, M)
+        
 
 
         
@@ -118,6 +119,7 @@ class DualAugmentedTwoTower(nn.Module):
         Creates index for reccommendation query lookup
         (Expects Numpy array)
         """
+        
         self.index.add(song_embeddings)
         
     
@@ -126,29 +128,13 @@ class DualAugmentedTwoTower(nn.Module):
         """
         Get k approximate nearest neighbours
         """
+        self.index.hnsw.efSearch = max(k, 2*k)
         distances, indices = self.index.search(query, k)
         return distances[0].tolist(), indices[0].tolist()
 
     def query_item_distance(self, query, song):
         return torch.sum((query - song) ** 2).item()
-    
-    def loss(self, score, labels):
-        """
-        Calculate & combine all loss terms including:
-            - Loss_p: dot-product loss
-            - Loss_u: AMM loss of user tower
-            - Loss_v: AMM loss of item tower
-        """
-
-        
-        # Dot-product loss
-        loss_p = F.binary_cross_entropy(score, labels)#F.binary_cross_entropy_with_logits(score, labels.float())
-
        
-        return loss_p
-    
-
-
     def plot(self, epochs:int, last_epoch_saved:int, folder:Optional[Path] = None) -> None: 
         """
         Plot the current progress based on the historic loss data
@@ -241,7 +227,7 @@ class DualAugmentedTwoTower(nn.Module):
 
 
 
-def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, patience:int = 10, num_epochs:int = 10, lambda_u:float = 1.0, lambda_v:float = 1.0, device:str = 'cpu'):
+def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_dataloader:DataLoader, optimizer:Adam, patience:int = 10, num_epochs:int = 10, device:str = 'cpu', loss_function=F.binary_cross_entropy):
     """
         Training function for training the models.
         Args:
@@ -279,7 +265,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
             score = model(user_features, song_embeddings, user_ids, song_ids)
 
             # Compute combined loss
-            loss = model.loss(score, labels)
+            loss = loss_function(score, labels)
 
             # Backward pass and optimization
             loss.backward()
@@ -308,7 +294,7 @@ def train_model(model:DualAugmentedTwoTower, train_dataloader:DataLoader, val_da
                 score = model(user_features, song_embeddings, user_ids, song_ids)
 
                 # Compute combined loss
-                loss = model.loss(score, labels)
+                loss = loss_function(score, labels)
 
                 epoch_val_loss += loss.item() * labels.size(0)
             

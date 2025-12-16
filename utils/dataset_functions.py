@@ -110,5 +110,32 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 
+def song_embeddings_pass_file(song_embeddings, bin_model, nbin_model, path:Path = Path("dataset") / "processed"):
+    bin_embeds = {}
+    nbin_embeds = {}
+    
+    for i in range(len(song_embeddings)):
+        data = song_embeddings.iloc[i]
+
+        sid = data['item_id']
+        embed = data['normalized_embed']
+
+        bin_embeds[sid] = bin_model.song_pass(torch.tensor(embed, dtype=torch.float32).unsqueeze(0), torch.tensor(sid, dtype=torch.long).unsqueeze(0)).squeeze(0)
+        nbin_embeds[sid] = nbin_model.song_pass(torch.tensor(embed, dtype=torch.float32).unsqueeze(0), torch.tensor(sid, dtype=torch.long).unsqueeze(0)).squeeze(0)
+
+
+    passed_embeddings = {
+        'binary': bin_embeds,
+        'continueous': nbin_embeds
+    }
+
+    torch.save(passed_embeddings, path/"song_subset.pt")
+
+    return passed_embeddings
+
+
+
+
+
 
 
