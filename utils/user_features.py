@@ -13,30 +13,20 @@ import numpy as np
 
 
 
-
-def get_interactions(df_by_uid, user, song, timestamp):
-    if user not in df_by_uid.groups:
-        return 0
-    df = df_by_uid.get_group(user)   # much smaller subset
-    return (df['item_id'].eq(song) & (df['timestamp'] <= timestamp)).sum()
-
-
-def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, dislikes:pd.DataFrame) -> tuple[int, int]:
+def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, dislikes:pd.DataFrame) -> tuple[list, int]:
     """
     (Pardon the horrendous long function name)
     Aggregate a user's interactions with a specific song up to ``timestamp``.
 
     Args:
-    timestamp (int):
-
+    row (pd.Series): The current row that's being evaluated
+    likes(pd.DataFrame): The dataframe containing likes 
+    dislikes(pd.DataFrame): The dataframe containing dislikes 
 
     Returns
     -------
-    label : int
-        1 if the net interaction score is positive, otherwise 0.
-    net_interactions : int
-        The raw interaction count:
-      len(likes) + len(undislikes) - len(dislikes) - len(unlikes)
+    label (list):  [binary_label, continueous_label]
+    net_interactions (int): The raw accumulated interaction count on the current song.
     """
 
     user = row['uid']
@@ -50,6 +40,7 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, disli
         df = df_by_uid.get_group(user)
         mask = (df["item_id"].eq(song)) & (df["timestamp"] <= timestamp)
         return mask.sum()
+    
 
     likes_count = count_interactions(likes)
     dislikes_count = count_interactions(dislikes)
@@ -64,9 +55,19 @@ def get_song_label_and_user_interacton(row: pd.Series, likes:pd.DataFrame, disli
 
 def extract_and_save_features(user_set:list, file_loc:Path, user_item_data:pd.DataFrame, likes:pd.DataFrame, dislikes:pd.DataFrame) -> None:
     """
-    Extract features per user and save them into seperate files.
+    For each user creates samples from the 10th item in user_item_data up until the last item. And saves them under ./dataset/processed/users/uid.pt
+
     Args:
-        
+    user_set (list): set of users that the function loops over. Is mainly used for the multi-threading.
+    file_loc (Path): I don't recall why I made this variable, but I'm not changing now. This should reference ./dataset/processed/users/uid.pt
+    user_item_data (pd.DataFrame): The dataframe containing all user listening events.
+
+    likes(pd.DataFrame): The dataframe containing likes 
+    dislikes(pd.DataFrame): The dataframe containing dislikes 
+
+    Returns
+    -------
+    None
     """
     likes = likes.groupby('uid')
     dislikes = dislikes.groupby('uid')

@@ -8,6 +8,7 @@ To keep the notebook as uncluttered as possible, I've thrown a lot of functions 
 from pathlib import Path
 import numpy as np
 import torch
+import pandas as pd
 from torch.utils.data import DataLoader, TensorDataset 
 from typing import Literal
 from datasets import Dataset, DatasetDict, load_dataset
@@ -110,7 +111,11 @@ def load_tensor_dataloader(file_name:str, file_loc:Path, batch_size:int=32, labe
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 
-def song_embeddings_pass_file(song_embeddings, bin_model, nbin_model, path:Path = Path("dataset") / "processed"):
+def song_embeddings_pass_file(song_embeddings:pd.DataFrame, bin_model, nbin_model, path:Path = Path("dataset") / "processed"):
+    """
+    Takes the raw song embeddings and makes a forward pass with both models so that we have our embedded song vectors.
+    """
+
     bin_embeds = {}
     nbin_embeds = {}
     
