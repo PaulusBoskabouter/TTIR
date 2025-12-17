@@ -1,6 +1,7 @@
 # IMPORTS
-
+import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 
 
@@ -39,8 +40,35 @@ def metrics(ranking, K, t = 0.8):
     M       = [average_precision(ranking, t)]
     N       = [NDCG(ranking)]
     metrics = np.array(P + R + F1 + N_K + M + N)
+    
+    metrics = np.array(N_K + N), np.array(P), np.array(R), np.array(F1), np.array(M)
 
     return metrics
+
+
+def plot(rows, cols, binary_scores, non_binary_scores, x_axis, plot_name):
+    fig, axes = plt.subplots(rows, cols, figsize=(16,4))
+    axes = axes.flatten()
+    
+
+
+    for i, ax in enumerate(axes):
+        ax.boxplot(
+            [binary_scores[:, i], non_binary_scores[:, i]],
+            tick_labels=["Binary", "Non-binary"],
+            showfliers=False
+        )
+
+        ax.set_title(x_axis[i])
+        ax.set_ylim(0, 1)
+        ax.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("Binary vs Non-binary Model Performance", fontsize=14)
+    plt.tight_layout()
+    plt.show()
+    plt.savefig(Path("results") / f"{plot_name}.png")
+
+
 
 """
 Aggregate metrics for a set of k. Expects 2D list of metrics
